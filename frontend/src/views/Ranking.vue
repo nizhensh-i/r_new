@@ -5,7 +5,8 @@
       <h3>{{ college }} {{ major }} {{ isTotal ? '按总分排名' : '按除政治后总分排名' }}</h3>
     </div>
 
-    <div class="ranking-container">
+    <!-- 桌面端表格视图 -->
+    <div class="ranking-container desktop-only">
       <el-table 
         :data="rankingData" 
         border 
@@ -23,6 +24,44 @@
         <el-table-column :prop="'subject4_score'" :label="subjectLabels.subject4_code" width="100"></el-table-column>
         <el-table-column v-if="!isTotal" prop="net_score" label="除政治后总分" width="120"></el-table-column>
       </el-table>
+    </div>
+
+    <!-- 移动端卡片视图 -->
+    <div class="ranking-container mobile-only">
+      <div 
+        v-for="(item, index) in rankingData" 
+        :key="index" 
+        class="ranking-card"
+        :class="{ 'current-user-card': currentUser && item.kaohao === currentUser.kaohao }"
+      >
+        <div class="ranking-card-header">
+          <span class="rank-badge">{{ item.rank }}</span>
+          <span class="kaohao">{{ item.kaohao }}</span>
+          <span class="total-score">总分: {{ item.total_score }}</span>
+        </div>
+        <div class="ranking-card-body">
+          <div class="score-item">
+            <span class="subject-name">{{ subjectLabels.subject1_code }}</span>
+            <span class="subject-score">{{ item.subject1_score }}</span>
+          </div>
+          <div class="score-item">
+            <span class="subject-name">{{ subjectLabels.subject2_code }}</span>
+            <span class="subject-score">{{ item.subject2_score }}</span>
+          </div>
+          <div class="score-item">
+            <span class="subject-name">{{ subjectLabels.subject3_code }}</span>
+            <span class="subject-score">{{ item.subject3_score }}</span>
+          </div>
+          <div class="score-item">
+            <span class="subject-name">{{ subjectLabels.subject4_code }}</span>
+            <span class="subject-score">{{ item.subject4_score }}</span>
+          </div>
+          <div v-if="!isTotal" class="score-item">
+            <span class="subject-name">除政治后总分</span>
+            <span class="subject-score">{{ item.net_score }}</span>
+          </div>
+        </div>
+      </div>
 
       <div class="pagination-container">
         <el-pagination
@@ -30,6 +69,7 @@
           layout="prev, pager, next"
           :total="total"
           :page-size="pageSize"
+          :pager-count="5"
           :current-page="currentPage"
           @current-change="handlePageChange"
         ></el-pagination>
@@ -210,14 +250,115 @@ const getCellStyle = ({ row }) => {
   gap: 10px;
 }
 
+/* 桌面端和移动端视图切换 */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* 移动端卡片样式 */
+.ranking-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 15px;
+  overflow: hidden;
+}
+
+.current-user-card {
+  border: 2px solid #409EFF;
+  background-color: #ecf5ff;
+}
+
+.ranking-card-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.rank-badge {
+  background-color: #409EFF;
+  color: white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.kaohao {
+  flex: 1;
+  font-size: 14px;
+}
+
+.total-score {
+  font-weight: bold;
+  color: #f56c6c;
+  font-size: 16px;
+}
+
+.ranking-card-body {
+  padding: 12px 15px;
+}
+
+.score-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #ebeef5;
+}
+
+.score-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.subject-name {
+  color: #606266;
+}
+
+.subject-score {
+  font-weight: bold;
+}
+
 @media screen and (max-width: 768px) {
-  .ranking-container {
-    padding: 15px;
-    overflow-x: auto;
+  .desktop-only {
+    display: none;
   }
   
-  .ranking-table {
-    min-width: 600px;
+  .mobile-only {
+    display: block;
+  }
+  
+  .ranking-container {
+    padding: 15px;
+  }
+  
+  .actions {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+    padding: 0 15px;
+  }
+  
+  .actions .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+  
+  .pagination-container .el-pagination {
+    justify-content: center;
+    flex-wrap: wrap;
   }
 }
 </style>

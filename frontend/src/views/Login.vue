@@ -9,12 +9,12 @@
     </div>
 
     <div class="form-container">
-      <h3>登录</h3>
+      <h3 class="title">登录</h3>
       <el-form 
         ref="formRef" 
         :model="loginForm" 
         :rules="loginRules" 
-        label-width="100px"
+        label-width="auto"
         class="login-form"
       >
         <el-form-item label="准考证号" prop="kaohao">
@@ -23,7 +23,7 @@
         <el-form-item label="密码" prop="password">
           <el-input v-model="loginForm.password" type="password" placeholder="请输入密码"></el-input>
         </el-form-item>
-        <el-form-item>
+        <el-form-item >
           <el-checkbox v-model="rememberMe">记住账号密码</el-checkbox>
         </el-form-item>
         <el-form-item>
@@ -162,7 +162,9 @@ const goToResetPassword = () => {
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
-
+.title {
+  text-align: center;
+}
 .login-form {
   margin-top: 20px;
 }
@@ -175,6 +177,23 @@ const goToResetPassword = () => {
   
   .el-form-item {
     margin-bottom: 15px;
+  }
+  
+  /* 修复移动端按钮对齐问题 */
+  /* .el-form-item .el-form-item__content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  } */
+  
+  .el-form-item .el-button {
+    margin-left: 0 !important;
+    margin-top: 10px;
+    width: 100%;
+  }
+  
+  .el-form-item .el-button:first-child {
+    margin-top: 0;
   }
 }
 </style>

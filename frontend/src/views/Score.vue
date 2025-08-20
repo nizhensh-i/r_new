@@ -9,7 +9,8 @@
       <el-button type="primary" @click="goToRanking('net')">按除政治后总分排名</el-button>
     </div>
 
-    <div class="score-container">
+    <!-- 桌面端表格视图 -->
+    <div class="score-container desktop-only">
       <h3>考生信息</h3>
       <el-table 
         :data="[userInfo]" 
@@ -29,6 +30,77 @@
         <el-table-column prop="net_score" label="除政治后总分" min-width="120"></el-table-column>
         <el-table-column prop="total_score" label="总分" min-width="100"></el-table-column>
       </el-table>
+    </div>
+
+    <!-- 移动端卡片视图 -->
+    <div class="score-container mobile-only">
+      <div class="score-cards">
+        <!-- 基本信息卡片 -->
+        <div class="score-card">
+          <div class="card-header">
+            <i class="el-icon-user"></i>
+            <span>基本信息</span>
+          </div>
+          <div class="card-body">
+            <div class="info-item">
+              <span class="info-label">准考证号</span>
+              <span class="info-value">{{ userInfo.kaohao }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">学院</span>
+              <span class="info-value">{{ userInfo.college }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">专业</span>
+              <span class="info-value">{{ userInfo.major }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 总分卡片 -->
+        <div class="score-card total-score-card">
+          <div class="card-header">
+            <i class="el-icon-trophy"></i>
+            <span>总分</span>
+          </div>
+          <div class="card-body">
+            <div class="total-score-display">
+              <span class="total-score-value">{{ userInfo.total_score }}</span>
+              <span class="total-score-label">分</span>
+            </div>
+            <div class="net-score-display">
+              <span class="net-score-label">除政治后总分:</span>
+              <span class="net-score-value">{{ userInfo.net_score }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 科目成绩卡片 -->
+        <div class="score-card">
+          <div class="card-header">
+            <i class="el-icon-document"></i>
+            <span>科目成绩</span>
+          </div>
+          <div class="card-body">
+            <div class="subject-item">
+              <span class="subject-name">{{ userInfo.subject1_code }}</span>
+              <span class="subject-score">{{ userInfo.subject1_score }}</span>
+            </div>
+            <div class="subject-item">
+              <span class="subject-name">{{ userInfo.subject2_code }}</span>
+              <span class="subject-score">{{ userInfo.subject2_score }}</span>
+            </div>
+            <div class="subject-item">
+              <span class="subject-name">{{ userInfo.subject3_code }}</span>
+              <span class="subject-score">{{ userInfo.subject3_score }}</span>
+            </div>
+            <div class="subject-item">
+              <span class="subject-name">{{ userInfo.subject4_code }}</span>
+              <span class="subject-score">{{ userInfo.subject4_score }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="common-rankings">
@@ -203,7 +275,118 @@ const logout = async () => {
   gap: 10px;
 }
 
+/* 桌面端和移动端视图切换 */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* 移动端卡片样式 */
+.score-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.score-card {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.card-header i {
+  margin-right: 8px;
+  color: #409EFF;
+}
+
+.card-body {
+  padding: 15px;
+}
+
+.info-item, .subject-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #ebeef5;
+}
+
+.info-item:last-child, .subject-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.info-label, .subject-name {
+  color: #606266;
+}
+
+.info-value, .subject-score {
+  font-weight: bold;
+}
+
+.total-score-card .card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 15px;
+}
+
+.total-score-display {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 15px;
+}
+
+.total-score-value {
+  font-size: 36px;
+  font-weight: bold;
+  color: #f56c6c;
+}
+
+.total-score-label {
+  font-size: 16px;
+  margin-left: 5px;
+}
+
+.net-score-display {
+  display: flex;
+  align-items: center;
+}
+
+.net-score-label {
+  margin-right: 5px;
+  color: #606266;
+}
+
+.net-score-value {
+  font-weight: bold;
+  color: #409EFF;
+}
+
 @media screen and (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+  
+  .mobile-only {
+    display: block;
+  }
+  
   .score-container, .common-rankings {
     padding: 15px;
   }
@@ -221,9 +404,28 @@ const logout = async () => {
     margin-bottom: 10px;
   }
   
-  .score-table {
+  .links-container {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+    padding: 0 15px;
+  }
+  
+  .links-container .el-button {
     width: 100%;
-    overflow-x: auto;
+    margin-left: 0 !important;
+  }
+  
+  .actions {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+    padding: 0 15px;
+  }
+  
+  .actions .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 }
 </style>
