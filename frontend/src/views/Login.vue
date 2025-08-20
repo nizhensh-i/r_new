@@ -24,6 +24,9 @@
           <el-input v-model="loginForm.password" type="password" placeholder="请输入密码"></el-input>
         </el-form-item>
         <el-form-item>
+          <el-checkbox v-model="rememberMe">记住账号密码</el-checkbox>
+        </el-form-item>
+        <el-form-item>
           <el-button type="primary" @click="submitForm">登录</el-button>
           <el-button @click="goToRegister">注册查分</el-button>
           <el-button @click="goToResetPassword">找回密码</el-button>
@@ -34,15 +37,49 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { userApi } from '@/api'
+import CryptoJS from 'crypto-js'
 
 const router = useRouter()
 const loginForm = reactive({
   kaohao: '',
   password: ''
+})
+const rememberMe = ref(false)
+
+// 加密密钥，实际应用中应该使用更安全的方式存储
+const SECRET_KEY = 'rank_system_secret_key'
+
+// 加密函数
+const encrypt = (text) => {
+  return CryptoJS.AES.encrypt(text, SECRET_KEY).toString()
+}
+
+// 解密函数
+const decrypt = (ciphertext) => {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, SECRET_KEY)
+  return bytes.toString(CryptoJS.enc.Utf8)
+}
+
+// 页面加载时检查是否有保存的账号密码
+onMounted(() => {
+  const savedCredentials = localStorage.getItem('savedCredentials')
+  if (savedCredentials) {
+    try {
+      const decrypted = decrypt(savedCredentials)
+      const credentials = JSON.parse(decrypted)
+      loginForm.kaohao = credentials.kaohao
+      loginForm.password = credentials.password
+      rememberMe.value = true
+    } catch (error) {
+      console.error('解密保存的凭证失败', error)
+      // 如果解密失败，清除保存的凭证
+      localStorage.removeItem('savedCredentials')
+    }
+  }
 })
 
 const loginRules = {
@@ -67,6 +104,20 @@ const submitForm = async () => {
         const response = await userApi.login(loginForm)
         localStorage.setItem('token', response.token)
         localStorage.setItem('user', JSON.stringify(response.user))
+        
+        // 如果选择了记住账号密码，则保存到本地存储
+        if (rememberMe.value) {
+          const credentials = {
+            kaohao: loginForm.kaohao,
+            password: loginForm.password
+          }
+          const encrypted = encrypt(JSON.stringify(credentials))
+          localStorage.setItem('savedCredentials', encrypted)
+        } else {
+          // 如果取消了记住账号密码，则清除本地存储
+          localStorage.removeItem('savedCredentials')
+        }
+        
         ElMessage.success('登录成功')
         router.push('/score')
       } catch (error) {

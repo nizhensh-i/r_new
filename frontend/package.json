@@ -19,5 +19,8 @@
     "vite": "^5.0.7",
     "vue": "^3.3.11",
     "vue-router": "^4.2.5"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
   }
 }
