@@ -11,7 +11,7 @@
     <div class="form-container">
       <h3>登录</h3>
       <el-form 
-        ref="loginForm" 
+        ref="formRef" 
         :model="loginForm" 
         :rules="loginRules" 
         label-width="100px"
