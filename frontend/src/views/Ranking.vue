@@ -14,6 +14,7 @@
         :cell-style="getCellStyle"
         :header-cell-style="{ textAlign: 'center', backgroundColor: '#f5f7fa' }"
         class="ranking-table"
+        v-loading="loading"
       >
         <el-table-column prop="rank" label="排名" width="80"></el-table-column>
         <el-table-column prop="kaohao" label="准考证号" min-width="120"></el-table-column>
@@ -24,52 +25,59 @@
         <el-table-column :prop="'subject4_score'" :label="subjectLabels.subject4_code" width="100"></el-table-column>
         <el-table-column v-if="!isTotal" prop="net_score" label="除政治后总分" width="120"></el-table-column>
       </el-table>
+      
+      <div class="pagination-container">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="total"
+          :page-size="pageSize"
+          :pager-count="5"
+          :current-page="currentPage"
+          @current-change="handlePageChange"
+        ></el-pagination>
+      </div>
     </div>
 
     <!-- 移动端优化表格视图 -->
     <div class="ranking-container mobile-only">
       <div class="mobile-table-container">
-        <div class="mobile-table-wrapper">
-          <table class="mobile-table">
-            <thead>
-              <tr>
-                <th class="fixed-column rank-th">排名</th>
-                <th class="fixed-column score-th">总分</th>
-                <th class="scrollable-columns">
-                  <div class="scrollable-header">
-                    <span v-if="!isTotal" class="header-cell">除政治</span>
-                    <span class="header-cell">{{ subjectLabels.subject1_code }}</span>
-                    <span class="header-cell">{{ subjectLabels.subject2_code }}</span>
-                    <span class="header-cell">{{ subjectLabels.subject3_code }}</span>
-                    <span class="header-cell">{{ subjectLabels.subject4_code }}</span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr 
-                v-for="(item, index) in rankingData" 
-                :key="index"
-                :class="{ 'current-user-row': currentUser && item.kaohao === currentUser.kaohao }"
+        <el-table
+          :data="rankingData"
+          style="width: 100%"
+          :row-class-name="getRowClassName"
+          @row-click="showKaohaoDetail"
+          v-loading="loading"
+          class="mobile-el-table"
+        >
+          <!-- 固定列 -->
+          <el-table-column fixed prop="rank" label="排名" width="50" />
+          <el-table-column 
+            fixed 
+            label="考号" 
+            width="100"
+            :show-overflow-tooltip="true"
+          >
+            <template #default="{ row }">
+              <span class="kaohao-mini">{{ row.kaohao.substring(0, 6) }}...</span>
+              <el-tooltip 
+                :content="row.kaohao" 
+                placement="top" 
+                :enterable="false"
               >
-                <td class="fixed-column rank-cell">
-                  <span class="rank-number">{{ item.rank }}</span>
-                  <span class="kaohao-mini">{{ item.kaohao.substring(0, 6) }}...</span>
-                </td>
-                <td class="fixed-column total-score-cell">{{ item.total_score }}</td>
-                <td class="scrollable-columns">
-                  <div class="scrollable-data">
-                    <span v-if="!isTotal" class="data-cell">{{ item.net_score }}</span>
-                    <span class="data-cell">{{ item.subject1_score }}</span>
-                    <span class="data-cell">{{ item.subject2_score }}</span>
-                    <span class="data-cell">{{ item.subject3_score }}</span>
-                    <span class="data-cell">{{ item.subject4_score }}</span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                <el-icon class="info-icon"><InfoFilled /></el-icon>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column fixed prop="total_score" label="总分" width="50" />
+          
+          <!-- 可滚动列 -->
+          <el-table-column v-if="!isTotal" prop="net_score" label="除政治后总分" width="60" />
+          <el-table-column :prop="'subject1_score'" :label="subjectLabels.subject1_code" width="60" />
+          <el-table-column :prop="'subject2_score'" :label="subjectLabels.subject2_code" width="50" />
+          <el-table-column :prop="'subject3_score'" :label="subjectLabels.subject3_code" width="50" />
+          <el-table-column :prop="'subject4_score'" :label="subjectLabels.subject4_code" width="60" />
+        </el-table>
         <div class="scroll-hint">← 左右滑动查看更多科目分数 →</div>
       </div>
       
@@ -87,6 +95,7 @@
           :key="index" 
           class="ranking-card"
           :class="{ 'current-user-card': currentUser && item.kaohao === currentUser.kaohao }"
+          @click="showKaohaoDetail(item)"
         >
           <div class="ranking-card-header">
             <span class="rank-badge">{{ item.rank }}</span>
@@ -135,6 +144,66 @@
       <el-button @click="goBack">返回个人成绩</el-button>
       <el-button type="primary" @click="toggleRankingType">切换到{{ isTotal ? '除政治后总分' : '总分' }}排名</el-button>
     </div>
+    
+    <!-- 考号详情对话框 -->
+    <el-dialog
+      v-model="showDetailDialog"
+      title="考生详情"
+      width="90%"
+      center
+      destroy-on-close
+      class="kaohao-detail-dialog"
+    >
+      <div v-if="selectedItem" class="detail-content">
+        <div class="detail-header">
+          <div class="detail-rank">排名: <span>{{ selectedItem.rank }}</span></div>
+          <div class="detail-kaohao">考号: <span>{{ selectedItem.kaohao }}</span></div>
+        </div>
+        
+        <div class="detail-scores">
+          <div class="detail-score-item">
+            <div class="score-label">总分</div>
+            <div class="score-value highlight">{{ selectedItem.total_score }}</div>
+          </div>
+          <div v-if="!isTotal" class="detail-score-item">
+            <div class="score-label">除政治后总分</div>
+            <div class="score-value">{{ selectedItem.net_score }}</div>
+          </div>
+          <div class="detail-score-item">
+            <div class="score-label">{{ subjectLabels.subject1_code }}</div>
+            <div class="score-value">{{ selectedItem.subject1_score }}</div>
+          </div>
+          <div class="detail-score-item">
+            <div class="score-label">{{ subjectLabels.subject2_code }}</div>
+            <div class="score-value">{{ selectedItem.subject2_score }}</div>
+          </div>
+          <div class="detail-score-item">
+            <div class="score-label">{{ subjectLabels.subject3_code }}</div>
+            <div class="score-value">{{ selectedItem.subject3_score }}</div>
+          </div>
+          <div class="detail-score-item">
+            <div class="score-label">{{ subjectLabels.subject4_code }}</div>
+            <div class="score-value">{{ selectedItem.subject4_score }}</div>
+          </div>
+        </div>
+        
+        <div class="detail-compare" v-if="currentUser && selectedItem.kaohao !== currentUser.kaohao">
+          <h4>与我的成绩对比</h4>
+          <div class="compare-item">
+            <div class="compare-label">总分差距</div>
+            <div class="compare-value" :class="getCompareClass(selectedItem.total_score, currentUser.total_score)">
+              {{ getScoreDiff(selectedItem.total_score, currentUser.total_score) }}
+            </div>
+          </div>
+          <div v-if="!isTotal" class="compare-item">
+            <div class="compare-label">除政治后总分差距</div>
+            <div class="compare-value" :class="getCompareClass(selectedItem.net_score, currentUser.net_score)">
+              {{ getScoreDiff(selectedItem.net_score, currentUser.net_score) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -142,6 +211,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { rankingApi } from '@/api'
 
 const router = useRouter()
@@ -156,6 +226,10 @@ const pageSize = ref(100)
 const total = ref(0)
 const currentUser = ref(null)
 const isCardView = ref(false) // 默认使用表格视图
+const hoveredKaohao = ref('') // 用于跟踪当前悬停的考号
+const selectedItem = ref(null) // 用于存储当前选中的项目
+const showDetailDialog = ref(false) // 控制详情对话框的显示
+const loading = ref(false) // 控制加载状态
 const subjectLabels = ref({
   subject1_code: '科目1',
   subject2_code: '科目2',
@@ -215,6 +289,7 @@ const fetchRankingData = async () => {
     return
   }
   
+  loading.value = true
   try {
     let response
     if (isTotal.value) {
@@ -233,6 +308,9 @@ const fetchRankingData = async () => {
     total.value = response.total
   } catch (error) {
     ElMessage.error('获取排名数据失败')
+    console.error('获取排名数据失败:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -273,6 +351,14 @@ const getCellStyle = ({ row }) => {
   }
 }
 
+// 获取行的类名，用于高亮当前用户
+const getRowClassName = ({ row }) => {
+  if (currentUser.value && row.kaohao === currentUser.value.kaohao) {
+    return 'current-user-row'
+  }
+  return ''
+}
+
 // 检测屏幕宽度，在小屏幕上默认使用表格视图
 const checkScreenSize = () => {
   // 在小屏幕上默认使用表格视图，因为我们已经优化了表格
@@ -282,6 +368,26 @@ const checkScreenSize = () => {
 // 切换视图模式
 const toggleViewMode = () => {
   isCardView.value = !isCardView.value
+}
+
+// 显示考号详情
+const showKaohaoDetail = (row) => {
+  selectedItem.value = row
+  showDetailDialog.value = true
+}
+
+// 计算分数差距
+const getScoreDiff = (score1, score2) => {
+  const diff = score1 - score2
+  return diff > 0 ? `+${diff}` : diff.toString()
+}
+
+// 获取比较样式类
+const getCompareClass = (score1, score2) => {
+  const diff = score1 - score2
+  if (diff > 0) return 'better'
+  if (diff < 0) return 'worse'
+  return 'equal'
 }
 </script>
 
@@ -336,79 +442,48 @@ const toggleViewMode = () => {
   margin-bottom: 15px;
 }
 
-.mobile-table-wrapper {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+.mobile-el-table {
+  margin-bottom: 10px;
 }
 
-.mobile-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+.mobile-el-table :deep(.el-table__body tr.current-user-row > td) {
+  background-color: #ecf5ff !important;
 }
 
-.mobile-table th,
-.mobile-table td {
-  padding: 10px;
-  text-align: center;
-  border: 1px solid #ebeef5;
-}
-
-.fixed-column {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background-color: #fff;
+.mobile-el-table :deep(.el-table__fixed) {
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
 }
 
-.rank-th, .score-th {
-  width: 70px;
-}
-
-.scrollable-columns {
-  padding: 0 !important;
-}
-
-.scrollable-header, .scrollable-data {
-  display: flex;
-  min-width: 400px; /* 确保有足够的宽度可以滚动 */
-}
-
-.header-cell, .data-cell {
-  flex: 1;
-  min-width: 80px;
-  padding: 10px;
-  text-align: center;
-  border-right: 1px solid #ebeef5;
-}
-
-.header-cell:last-child, .data-cell:last-child {
-  border-right: none;
-}
-
-.rank-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.rank-number {
+.mobile-el-table :deep(.el-table__header th) {
+  background-color: #f5f7fa;
+  color: #606266;
   font-weight: bold;
-  font-size: 16px;
-  color: #409EFF;
+  padding: 8px 0;
+}
+
+.mobile-el-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.mobile-el-table :deep(.el-table__row:hover > td) {
+  background-color: #f5f7fa;
 }
 
 .kaohao-mini {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
+  font-size: 13px;
+  color: #606266;
+  margin-right: 5px;
 }
 
-.total-score-cell {
-  font-weight: bold;
-  color: #f56c6c;
+.info-icon {
+  font-size: 14px;
+  color: #909399;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.info-icon:hover {
+  color: #409EFF;
 }
 
 .scroll-hint {
@@ -432,7 +507,7 @@ const toggleViewMode = () => {
 }
 
 /* 当前用户高亮 */
-.current-user-row {
+.current-user-row td {
   background-color: #ecf5ff !important;
 }
 
@@ -443,6 +518,13 @@ const toggleViewMode = () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin-bottom: 15px;
   overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.ranking-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .current-user-card {
@@ -508,6 +590,92 @@ const toggleViewMode = () => {
   font-weight: bold;
 }
 
+/* 详情对话框样式 */
+.detail-content {
+  padding: 10px;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.detail-rank, .detail-kaohao {
+  font-size: 16px;
+}
+
+.detail-rank span, .detail-kaohao span {
+  font-weight: bold;
+  color: #409EFF;
+}
+
+.detail-scores {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.detail-score-item {
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.score-label {
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.score-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.score-value.highlight {
+  color: #f56c6c;
+  font-size: 20px;
+}
+
+.detail-compare {
+  background-color: #f0f9eb;
+  border-radius: 6px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.detail-compare h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #67c23a;
+}
+
+.compare-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.compare-value {
+  font-weight: bold;
+}
+
+.compare-value.better {
+  color: #f56c6c;
+}
+
+.compare-value.worse {
+  color: #67c23a;
+}
+
+.compare-value.equal {
+  color: #909399;
+}
+
 @media screen and (max-width: 768px) {
   .desktop-only {
     display: none;
@@ -536,6 +704,24 @@ const toggleViewMode = () => {
   .pagination-container .el-pagination {
     justify-content: center;
     flex-wrap: wrap;
+  }
+  
+  .detail-scores {
+    grid-template-columns: 1fr;
+  }
+  
+  /* 让表格行在移动端可点击 */
+  .mobile-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .mobile-table tbody tr:hover {
+    background-color: #f5f7fa;
+  }
+  
+  .mobile-table tbody tr:active {
+    background-color: #e6f7ff;
   }
 }
 </style>
