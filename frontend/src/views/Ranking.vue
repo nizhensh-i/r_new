@@ -26,39 +26,94 @@
       </el-table>
     </div>
 
-    <!-- 移动端卡片视图 -->
+    <!-- 移动端优化表格视图 -->
     <div class="ranking-container mobile-only">
-      <div 
-        v-for="(item, index) in rankingData" 
-        :key="index" 
-        class="ranking-card"
-        :class="{ 'current-user-card': currentUser && item.kaohao === currentUser.kaohao }"
-      >
-        <div class="ranking-card-header">
-          <span class="rank-badge">{{ item.rank }}</span>
-          <span class="kaohao">{{ item.kaohao }}</span>
-          <span class="total-score">总分: {{ item.total_score }}</span>
+      <div class="mobile-table-container">
+        <div class="mobile-table-wrapper">
+          <table class="mobile-table">
+            <thead>
+              <tr>
+                <th class="fixed-column rank-th">排名</th>
+                <th class="fixed-column score-th">总分</th>
+                <th class="scrollable-columns">
+                  <div class="scrollable-header">
+                    <span v-if="!isTotal" class="header-cell">除政治</span>
+                    <span class="header-cell">{{ subjectLabels.subject1_code }}</span>
+                    <span class="header-cell">{{ subjectLabels.subject2_code }}</span>
+                    <span class="header-cell">{{ subjectLabels.subject3_code }}</span>
+                    <span class="header-cell">{{ subjectLabels.subject4_code }}</span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr 
+                v-for="(item, index) in rankingData" 
+                :key="index"
+                :class="{ 'current-user-row': currentUser && item.kaohao === currentUser.kaohao }"
+              >
+                <td class="fixed-column rank-cell">
+                  <span class="rank-number">{{ item.rank }}</span>
+                  <span class="kaohao-mini">{{ item.kaohao.substring(0, 6) }}...</span>
+                </td>
+                <td class="fixed-column total-score-cell">{{ item.total_score }}</td>
+                <td class="scrollable-columns">
+                  <div class="scrollable-data">
+                    <span v-if="!isTotal" class="data-cell">{{ item.net_score }}</span>
+                    <span class="data-cell">{{ item.subject1_score }}</span>
+                    <span class="data-cell">{{ item.subject2_score }}</span>
+                    <span class="data-cell">{{ item.subject3_score }}</span>
+                    <span class="data-cell">{{ item.subject4_score }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div class="ranking-card-body">
-          <div class="score-item">
-            <span class="subject-name">{{ subjectLabels.subject1_code }}</span>
-            <span class="subject-score">{{ item.subject1_score }}</span>
+        <div class="scroll-hint">← 左右滑动查看更多科目分数 →</div>
+      </div>
+      
+      <!-- 表格/卡片切换按钮 -->
+      <div class="view-toggle">
+        <el-button size="small" @click="toggleViewMode">
+          {{ isCardView ? '切换到表格视图' : '切换到卡片视图' }}
+        </el-button>
+      </div>
+      
+      <!-- 卡片视图（可选切换） -->
+      <div v-if="isCardView" class="card-view">
+        <div 
+          v-for="(item, index) in rankingData" 
+          :key="index" 
+          class="ranking-card"
+          :class="{ 'current-user-card': currentUser && item.kaohao === currentUser.kaohao }"
+        >
+          <div class="ranking-card-header">
+            <span class="rank-badge">{{ item.rank }}</span>
+            <span class="kaohao">{{ item.kaohao }}</span>
+            <span class="total-score">总分: {{ item.total_score }}</span>
           </div>
-          <div class="score-item">
-            <span class="subject-name">{{ subjectLabels.subject2_code }}</span>
-            <span class="subject-score">{{ item.subject2_score }}</span>
-          </div>
-          <div class="score-item">
-            <span class="subject-name">{{ subjectLabels.subject3_code }}</span>
-            <span class="subject-score">{{ item.subject3_score }}</span>
-          </div>
-          <div class="score-item">
-            <span class="subject-name">{{ subjectLabels.subject4_code }}</span>
-            <span class="subject-score">{{ item.subject4_score }}</span>
-          </div>
-          <div v-if="!isTotal" class="score-item">
-            <span class="subject-name">除政治后总分</span>
-            <span class="subject-score">{{ item.net_score }}</span>
+          <div class="ranking-card-body">
+            <div class="score-item">
+              <span class="subject-name">{{ subjectLabels.subject1_code }}</span>
+              <span class="subject-score">{{ item.subject1_score }}</span>
+            </div>
+            <div class="score-item">
+              <span class="subject-name">{{ subjectLabels.subject2_code }}</span>
+              <span class="subject-score">{{ item.subject2_score }}</span>
+            </div>
+            <div class="score-item">
+              <span class="subject-name">{{ subjectLabels.subject3_code }}</span>
+              <span class="subject-score">{{ item.subject3_score }}</span>
+            </div>
+            <div class="score-item">
+              <span class="subject-name">{{ subjectLabels.subject4_code }}</span>
+              <span class="subject-score">{{ item.subject4_score }}</span>
+            </div>
+            <div v-if="!isTotal" class="score-item">
+              <span class="subject-name">除政治后总分</span>
+              <span class="subject-score">{{ item.net_score }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -100,6 +155,7 @@ const currentPage = ref(1)
 const pageSize = ref(100)
 const total = ref(0)
 const currentUser = ref(null)
+const isCardView = ref(false) // 默认使用表格视图
 const subjectLabels = ref({
   subject1_code: '科目1',
   subject2_code: '科目2',
@@ -132,6 +188,10 @@ onMounted(() => {
   rankingType.value = type || 'total'
   college.value = routeCollege || (currentUser.value ? currentUser.value.college : '')
   major.value = routeMajor || (currentUser.value ? currentUser.value.major : '')
+  
+  // 检测屏幕宽度，在小屏幕上默认使用表格视图
+  checkScreenSize()
+  window.addEventListener('resize', checkScreenSize)
   
   fetchRankingData()
 })
@@ -212,6 +272,17 @@ const getCellStyle = ({ row }) => {
     textAlign: 'center'
   }
 }
+
+// 检测屏幕宽度，在小屏幕上默认使用表格视图
+const checkScreenSize = () => {
+  // 在小屏幕上默认使用表格视图，因为我们已经优化了表格
+  isCardView.value = false
+}
+
+// 切换视图模式
+const toggleViewMode = () => {
+  isCardView.value = !isCardView.value
+}
 </script>
 
 <style scoped>
@@ -257,6 +328,112 @@ const getCellStyle = ({ row }) => {
 
 .mobile-only {
   display: none;
+}
+
+/* 移动端表格样式 */
+.mobile-table-container {
+  position: relative;
+  margin-bottom: 15px;
+}
+
+.mobile-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.mobile-table th,
+.mobile-table td {
+  padding: 10px;
+  text-align: center;
+  border: 1px solid #ebeef5;
+}
+
+.fixed-column {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: #fff;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.rank-th, .score-th {
+  width: 70px;
+}
+
+.scrollable-columns {
+  padding: 0 !important;
+}
+
+.scrollable-header, .scrollable-data {
+  display: flex;
+  min-width: 400px; /* 确保有足够的宽度可以滚动 */
+}
+
+.header-cell, .data-cell {
+  flex: 1;
+  min-width: 80px;
+  padding: 10px;
+  text-align: center;
+  border-right: 1px solid #ebeef5;
+}
+
+.header-cell:last-child, .data-cell:last-child {
+  border-right: none;
+}
+
+.rank-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rank-number {
+  font-weight: bold;
+  font-size: 16px;
+  color: #409EFF;
+}
+
+.kaohao-mini {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
+
+.total-score-cell {
+  font-weight: bold;
+  color: #f56c6c;
+}
+
+.scroll-hint {
+  text-align: center;
+  color: #909399;
+  font-size: 12px;
+  margin-top: 8px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+.view-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 15px 0;
+}
+
+/* 当前用户高亮 */
+.current-user-row {
+  background-color: #ecf5ff !important;
 }
 
 /* 移动端卡片样式 */
