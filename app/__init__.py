@@ -15,10 +15,10 @@ login_manager.login_view = 'main_view.main'
 def create_app():
     app = Flask(__name__)
     # 数据库地址
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////home/ubuntu/USTCrank/scores.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////Users/v/Documents/proj/rank/scores/2025/data.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = 'False'
     # 表单 防CSRF & password hash
-    app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+    app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY") or 'hard to guess string'
     if app.config['SECRET_KEY'] is None:
         raise ValueError(" you must set environment variable SECRET_KEY and remember it before it runs"
                          "(don't change it after that)")

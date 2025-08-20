@@ -3,7 +3,7 @@ from app.models import User
 from app import create_app, db
 from flask_script import Manager, Shell
 from werkzeug.exceptions import InternalServerError
-
+from app.utils.common import get_local_ip
 
 app = create_app()
 manager = Manager(app)
@@ -22,7 +22,7 @@ def make_shell_context():
 
 @manager.command
 def run():
-    app.run(host='172.18.66.3', port=8089)
+    app.run(host=get_local_ip(), port=8089)
 
 
 manager.add_command("shell", Shell(make_context=make_shell_context))
