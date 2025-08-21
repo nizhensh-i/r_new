@@ -1,8 +1,8 @@
 <template>
   <div class="container">
-    <div class="header">
-      <h2>研究生成绩排名查询系统</h2>
-      <h3>{{ college }} {{ major }} {{ isTotal ? '按总分排名' : '按除政治后总分排名' }}</h3>
+    <div class="header mobile-optimized">
+      <h3 class="system-title">研究生成绩排名查询系统</h3>
+      <h4 class="ranking-info">{{ college }} {{ major }} {{ isTotal ? '按总分排名' : '按除政治后总分排名' }}</h4>
     </div>
 
     <!-- 桌面端表格视图 -->
@@ -29,7 +29,7 @@
       <div class="pagination-container">
         <el-pagination
           background
-          layout="prev, pager, next"
+          layout="total, prev, pager, next"
           :total="total"
           :page-size="pageSize"
           :pager-count="5"
@@ -44,9 +44,10 @@
       <div class="mobile-table-container">
         <el-table
           :data="rankingData"
-          style="width: 100%"
           :row-class-name="getRowClassName"
+          :header-cell-style="{padding: '0px'}"
           @row-click="showKaohaoDetail"
+          :height="tableHeight"
           v-loading="loading"
           class="mobile-el-table"
         >
@@ -59,14 +60,7 @@
             :show-overflow-tooltip="true"
           >
             <template #default="{ row }">
-              <span class="kaohao-mini">{{ row.kaohao.substring(0, 6) }}...</span>
-              <el-tooltip 
-                :content="row.kaohao" 
-                placement="top" 
-                :enterable="false"
-              >
-                <el-icon class="info-icon"><InfoFilled /></el-icon>
-              </el-tooltip>
+              <span class="kaohao-mini">...{{ row.kaohao.slice(-4) }}</span>
             </template>
           </el-table-column>
           <el-table-column fixed prop="total_score" label="总分" width="50" />
@@ -80,60 +74,14 @@
         </el-table>
         <div class="scroll-hint">← 左右滑动查看更多科目分数 →</div>
       </div>
-      
-      <!-- 表格/卡片切换按钮 -->
-      <div class="view-toggle">
-        <el-button size="small" @click="toggleViewMode">
-          {{ isCardView ? '切换到表格视图' : '切换到卡片视图' }}
-        </el-button>
-      </div>
-      
-      <!-- 卡片视图（可选切换） -->
-      <div v-if="isCardView" class="card-view">
-        <div 
-          v-for="(item, index) in rankingData" 
-          :key="index" 
-          class="ranking-card"
-          :class="{ 'current-user-card': currentUser && item.kaohao === currentUser.kaohao }"
-          @click="showKaohaoDetail(item)"
-        >
-          <div class="ranking-card-header">
-            <span class="rank-badge">{{ item.rank }}</span>
-            <span class="kaohao">{{ item.kaohao }}</span>
-            <span class="total-score">总分: {{ item.total_score }}</span>
-          </div>
-          <div class="ranking-card-body">
-            <div class="score-item">
-              <span class="subject-name">{{ subjectLabels.subject1_code }}</span>
-              <span class="subject-score">{{ item.subject1_score }}</span>
-            </div>
-            <div class="score-item">
-              <span class="subject-name">{{ subjectLabels.subject2_code }}</span>
-              <span class="subject-score">{{ item.subject2_score }}</span>
-            </div>
-            <div class="score-item">
-              <span class="subject-name">{{ subjectLabels.subject3_code }}</span>
-              <span class="subject-score">{{ item.subject3_score }}</span>
-            </div>
-            <div class="score-item">
-              <span class="subject-name">{{ subjectLabels.subject4_code }}</span>
-              <span class="subject-score">{{ item.subject4_score }}</span>
-            </div>
-            <div v-if="!isTotal" class="score-item">
-              <span class="subject-name">除政治后总分</span>
-              <span class="subject-score">{{ item.net_score }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <div class="pagination-container">
         <el-pagination
           background
-          layout="prev, pager, next"
+         layout="prev, pager, next"
           :total="total"
           :page-size="pageSize"
-          :pager-count="5"
+          :pager-count="4"
           :current-page="currentPage"
           @current-change="handlePageChange"
         ></el-pagination>
@@ -151,6 +99,7 @@
       title="考生详情"
       width="90%"
       center
+      align-center
       destroy-on-close
       class="kaohao-detail-dialog"
     >
@@ -225,7 +174,6 @@ const currentPage = ref(1)
 const pageSize = ref(100)
 const total = ref(0)
 const currentUser = ref(null)
-const isCardView = ref(false) // 默认使用表格视图
 const hoveredKaohao = ref('') // 用于跟踪当前悬停的考号
 const selectedItem = ref(null) // 用于存储当前选中的项目
 const showDetailDialog = ref(false) // 控制详情对话框的显示
@@ -237,11 +185,17 @@ const subjectLabels = ref({
   subject4_code: '科目4'
 })
 
+// 动态计算表格高度
+const tableHeight = ref('calc(100vh - 200px)')
+
 // 判断是按总分排名还是按除政治后总分排名
 const isTotal = computed(() => rankingType.value === 'total')
 
 // 从路由参数中获取排名类型和学院专业信息
 onMounted(() => {
+  // 计算表格高度
+  calculateTableHeight()
+  window.addEventListener('resize', calculateTableHeight)
   const userStr = localStorage.getItem('user')
   if (userStr) {
     currentUser.value = JSON.parse(userStr)
@@ -263,7 +217,7 @@ onMounted(() => {
   college.value = routeCollege || (currentUser.value ? currentUser.value.college : '')
   major.value = routeMajor || (currentUser.value ? currentUser.value.major : '')
   
-  // 检测屏幕宽度，在小屏幕上默认使用表格视图
+  // 检测屏幕宽度
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
   
@@ -359,15 +313,20 @@ const getRowClassName = ({ row }) => {
   return ''
 }
 
-// 检测屏幕宽度，在小屏幕上默认使用表格视图
+// 检测屏幕宽度
 const checkScreenSize = () => {
-  // 在小屏幕上默认使用表格视图，因为我们已经优化了表格
-  isCardView.value = false
+  // 屏幕大小变化时重新计算表格高度
+  calculateTableHeight()
 }
 
-// 切换视图模式
-const toggleViewMode = () => {
-  isCardView.value = !isCardView.value
+// 计算表格高度
+const calculateTableHeight = () => {
+  // 获取视口高度
+  const viewportHeight = window.innerHeight
+  // 计算其他元素的高度总和（标题、分页、按钮等）
+  const otherElementsHeight = 180 // 根据实际情况调整
+  // 设置表格高度
+  tableHeight.value = `${viewportHeight - otherElementsHeight - 55}px`
 }
 
 // 显示考号详情
@@ -395,20 +354,31 @@ const getCompareClass = (score1, score2) => {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 15px;
 }
 
 .header {
   text-align: center;
-  margin-bottom: 20px;
+}
+
+.header.mobile-optimized .system-title {
+  font-size: 1.2rem;
+  margin-bottom: 5px;
+  margin-top: 0;
+}
+
+.header.mobile-optimized .ranking-info {
+  font-size: 0.9rem;
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .ranking-container {
   background-color: #fff;
-  padding: 20px;
+  padding: 15px;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  margin-bottom: 20px;
+  margin-bottom: 5px;
 }
 
 .ranking-table {
@@ -416,7 +386,6 @@ const getCompareClass = (score1, score2) => {
 }
 
 .pagination-container {
-  margin-top: 20px;
   display: flex;
   justify-content: center;
 }
@@ -439,7 +408,7 @@ const getCompareClass = (score1, score2) => {
 /* 移动端表格样式 */
 .mobile-table-container {
   position: relative;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 }
 
 .mobile-el-table {
@@ -500,94 +469,9 @@ const getCompareClass = (score1, score2) => {
   100% { opacity: 0.5; }
 }
 
-.view-toggle {
-  display: flex;
-  justify-content: center;
-  margin: 15px 0;
-}
-
 /* 当前用户高亮 */
 .current-user-row td {
   background-color: #ecf5ff !important;
-}
-
-/* 移动端卡片样式 */
-.ranking-card {
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin-bottom: 15px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.ranking-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.current-user-card {
-  border: 2px solid #409EFF;
-  background-color: #ecf5ff;
-}
-
-.ranking-card-header {
-  display: flex;
-  align-items: center;
-  padding: 12px 15px;
-  background-color: #f5f7fa;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.rank-badge {
-  background-color: #409EFF;
-  color: white;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 10px;
-}
-
-.kaohao {
-  flex: 1;
-  font-size: 14px;
-}
-
-.total-score {
-  font-weight: bold;
-  color: #f56c6c;
-  font-size: 16px;
-}
-
-.ranking-card-body {
-  padding: 12px 15px;
-}
-
-.score-item {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed #ebeef5;
-}
-
-.score-item:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.subject-name {
-  color: #606266;
-}
-
-.subject-score {
-  font-weight: bold;
 }
 
 /* 详情对话框样式 */
@@ -686,12 +570,16 @@ const getCompareClass = (score1, score2) => {
   }
   
   .ranking-container {
-    padding: 15px;
+    padding: 10px;
+  }
+  
+  .container {
+    padding: 10px;
   }
   
   .actions {
     flex-direction: column;
-    gap: 10px;
+    gap: 5px;
     align-items: stretch;
     padding: 0 15px;
   }
