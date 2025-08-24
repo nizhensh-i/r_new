@@ -1,5 +1,4 @@
 from flask import jsonify, request, current_app, g, make_response
-from flask_login import login_user, logout_user, login_required, current_user
 import requests
 from urllib.parse import quote
 from bs4 import BeautifulSoup

@@ -3,13 +3,15 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_cors import CORS
 from config import config
-
+import os
 db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.session_protection = 'basic'
 login_manager.login_view = 'api.login'
 
 def create_app(config_name='default'):
+    print('应用名称:', os.getenv('FLASK_APP', ''))
+    print('环境：', config_name)
     app = Flask(__name__)
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)

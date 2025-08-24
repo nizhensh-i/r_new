@@ -11,10 +11,11 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:////Users/nizhenshi/Documents/proj/rank_new/scores/2025/data.db'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:////Users/nizhenshi/Documents/proj/rank_new/backend/scores/2025/data.db'
 
 class ProductionConfig(Config):
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:////Users/nizhenshi/Documents/proj/rank_new/scores/2025/data.db'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:////home/ustc/data.db'
+
 
 config = {
     'development': DevelopmentConfig,

@@ -15,18 +15,15 @@ def get_local_ip():
     except:
         return '127.0.0.1'
 
-app = create_app('development')
+app = create_app(os.getenv('FLASK_CONFIG') or 'default')
 
 @app.shell_context_processor
 def make_shell_context():
     return dict(app=app, db=db, User=User)
 
-@app.cli.command()
-def test():
-    """Run the unit tests."""
-    import unittest
-    tests = unittest.TestLoader().discover('tests')
-    unittest.TextTestRunner(verbosity=2).run(tests)
+# @app.cli.command()
+# def deploy():
+#     db.create_all()
 
 if __name__ == '__main__':
     app.run(host=get_local_ip(), port=5000, debug=True)

@@ -56,8 +56,7 @@
           <el-table-column 
             fixed 
             label="考号" 
-            width="100"
-            :show-overflow-tooltip="true"
+            width="75"
           >
             <template #default="{ row }">
               <span class="kaohao-mini">...{{ row.kaohao.slice(-4) }}</span>
@@ -81,7 +80,7 @@
          layout="prev, pager, next"
           :total="total"
           :page-size="pageSize"
-          :pager-count="4"
+          :pager-count="5"
           :current-page="currentPage"
           @current-change="handlePageChange"
         ></el-pagination>
