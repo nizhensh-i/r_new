@@ -66,6 +66,7 @@ const decrypt = (ciphertext) => {
 
 // 页面加载时检查是否有保存的账号密码
 onMounted(() => {
+  console.log('')
   const savedCredentials = localStorage.getItem('savedCredentials')
   if (savedCredentials) {
     try {
