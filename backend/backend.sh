@@ -18,7 +18,7 @@ function backend_to_remote() {
     docker save -o $backend_tar nizhenshi/rank_backend
 
     LOCAL_FILE=$backend_tar
-    REMOTE_FILE="/root/user/"
+    REMOTE_FILE="/home/ubuntu/user/"
     scp $LOCAL_FILE $ROMOTE_USER@$ROMOTE_HOST:$REMOTE_FILE
     if [[ $? -eq 0 ]];then
       echo "传输成功 $LOCAL_FILE"

@@ -6,7 +6,7 @@ function run_container() {
   cmd_front=""
   cmd_backend=""
   remote_cmd_front=""
-  remote_cmd_backend="docker rm -f rank_backend;docker rmi nizhenshi/rank_backend;docker load -i rank_backend.tar;docker run --name rank_backend -v /root/user/rank/data.db:/home/ustc/data.db -d -p 6000:5000 nizhenshi/rank_backend;"
+  remote_cmd_backend="docker rm -f rank_backend;docker rmi nizhenshi/rank_backend;docker load -i rank_backend.tar;docker run --name rank_backend -v /home/ubuntu/user/rank/data.db:/home/ustc/data.db -d -p 6000:5000 nizhenshi/rank_backend;"
   
   # #生产
   # docker run --name rank_backend -v /root/user/rank/data.db:/home/ustc/data.db 5001:5000 -d -p nizhenshi/rank_backend;
@@ -26,7 +26,7 @@ function run_container() {
   fi
   echo "cmd_front:" $cmd_front
   echo "cmd_backend:" $cmd_backend
-  ssh $ROMOTE_USER@$ROMOTE_HOST "cd /root/user;$cmd_front $cmd_backend"
+  ssh $ROMOTE_USER@$ROMOTE_HOST "cd /home/ubuntu/user;$cmd_front $cmd_backend"
   if [[ $? -eq 0 ]];then
     echo "执行成功"
   else
@@ -53,4 +53,4 @@ function deploy() {
     run_container "backend"
 }
 
-deploy
+deploy_front
