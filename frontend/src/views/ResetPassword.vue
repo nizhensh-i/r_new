@@ -31,10 +31,10 @@
           </el-form-item>
         </template>
         <el-form-item label="新密码" prop="password">
-          <el-input v-model="form.password" type="password" placeholder="请输入新密码"></el-input>
+          <el-input v-model="form.password" type="password" placeholder="请输入新密码" show-password></el-input>
         </el-form-item>
         <el-form-item label="确认新密码" prop="password2">
-          <el-input v-model="form.password2" type="password" placeholder="请再次输入新密码"></el-input>
+          <el-input v-model="form.password2" type="password" placeholder="请再次输入新密码" show-password></el-input>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="submitForm">{{ isLoggedIn ? '修改密码' : '重置密码' }}</el-button>

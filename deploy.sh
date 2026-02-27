@@ -53,4 +53,4 @@ function deploy() {
     run_container "backend"
 }
 
-deploy_front
+deploy

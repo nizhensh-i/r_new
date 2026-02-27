@@ -21,7 +21,7 @@
           <el-input v-model="loginForm.kaohao" placeholder="请输入准考证号"></el-input>
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input v-model="loginForm.password" type="password" placeholder="请输入密码"></el-input>
+          <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password></el-input>
         </el-form-item>
         <el-form-item >
           <el-checkbox v-model="rememberMe">记住账号密码</el-checkbox>

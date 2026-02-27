@@ -15,7 +15,7 @@ function getLocalIP() {
     return 'localhost'
 }
 
-const backendAddr = `http://${getLocalIP()}:5001`
+const backendAddr = `http://${getLocalIP()}:5000`
 
 // https://vitejs.dev/config/
 export default defineConfig({

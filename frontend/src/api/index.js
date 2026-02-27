@@ -55,6 +55,10 @@ export const userApi = {
   getScore() {
     return api.get('/api/score')
   },
+  // 获取公开配置
+  getPublicConfig() {
+    return api.get('/api/public_config')
+  },
   // 登出
   logout() {
     return api.get('/api/logout')

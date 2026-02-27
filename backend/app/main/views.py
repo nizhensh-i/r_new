@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from ..models import User
 from datetime import datetime
 from functools import wraps
+from flask import abort
+import re
 
 # 装饰器 用于调试 显示调用每个函数耗费时间
 def decorator(func):
@@ -99,7 +101,25 @@ def cjcx():
         if not isinstance(r, requests.Response):
             flash(r)
             return redirect(url_for("main_view.cjcx"))
-        user = User.insert_new(parse_html_data(r.text), password=form.password.data)
+        user_data = parse_html_data(r.text)
+        allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
+        blocklist = current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or []
+        college = user_data[1] if user_data and len(user_data) > 1 else ''
+        def _display_college_name(name):
+            if not name:
+                return '该学院'
+            return re.sub(r'^\\s*\\d+\\s*', '', name).strip() or '该学院'
+
+        if allowlist:
+            if not college or college.strip() not in allowlist:
+                flash(f"未开放{_display_college_name(college)}分数排名")
+                return redirect(url_for("main_view.cjcx"))
+        elif blocklist:
+            if not college or college.strip() in blocklist:
+                flash(f"未开放{_display_college_name(college)}分数排名")
+                return redirect(url_for("main_view.cjcx"))
+
+        user = User.insert_new(user_data, password=form.password.data)
         if user is None:
             flash("数据插入失败，请联系管理员")
             return redirect(url_for("main_view.cjcx"))
@@ -170,6 +190,14 @@ def get_validate_image():
 @main_view.route('/ranking_total/<college>/<major>')
 @login_required
 def ranking_total(college, major):
+    allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
+    blocklist = current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or []
+    if allowlist:
+        if not college or college.strip() not in allowlist:
+            abort(403)
+    elif blocklist:
+        if not college or college.strip() in blocklist:
+            abort(403)
     page = request.args.get('page', 1, type=int)
     pagination = User.query.filter_by(college=college, major=major).order_by(User.total_score.desc()).paginate(
         page, per_page=current_app.config["USERS_PER_PAGE"], error_out=False
@@ -184,6 +212,14 @@ def ranking_total(college, major):
 @main_view.route('/ranking_net/<college>/<major>')
 @login_required
 def ranking_net(college, major):
+    allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
+    blocklist = current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or []
+    if allowlist:
+        if not college or college.strip() not in allowlist:
+            abort(403)
+    elif blocklist:
+        if not college or college.strip() in blocklist:
+            abort(403)
     page = request.args.get('page', 1, type=int)
     pagination = User.query.filter_by(college=college, major=major).order_by(User.net_score.desc()).paginate(
         page, per_page=current_app.config["USERS_PER_PAGE"], error_out=False

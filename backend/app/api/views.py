@@ -3,12 +3,66 @@ import requests
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from datetime import datetime
+import re
 from functools import wraps
 import jwt
 from . import api
-from .errors import unauthorized, bad_request
+from .errors import unauthorized, bad_request, forbidden
 from ..models import User
 from .. import db
+
+def _is_college_allowed(college):
+    allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
+    blocklist = current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or []
+    if not allowlist:
+        if not blocklist:
+            return True
+        if not college:
+            return False
+        return college.strip() not in blocklist
+    if not college:
+        return False
+    return college.strip() in allowlist
+
+def _display_college_name(college):
+    if not college:
+        return '该学院'
+    return re.sub(r'^\\s*\\d+\\s*', '', college).strip() or '该学院'
+
+def _build_super_admin_user():
+    return {
+        'kaohao': current_app.config.get('SUPER_ADMIN_KAOHAO'),
+        'college': current_app.config.get('SUPER_ADMIN_DEFAULT_COLLEGE') or '',
+        'major': current_app.config.get('SUPER_ADMIN_DEFAULT_MAJOR') or '',
+        'subject1_code': '',
+        'subject1_score': 0,
+        'subject2_code': '',
+        'subject2_score': 0,
+        'subject3_code': '',
+        'subject3_score': 0,
+        'subject4_code': '',
+        'subject4_score': 0,
+        'net_score': 0,
+        'total_score': 0,
+        'is_super_admin': True
+    }
+
+def _is_super_admin_login(kaohao, password):
+    if not current_app.config.get('SUPER_ADMIN_ENABLED'):
+        return False
+    return (
+        kaohao == current_app.config.get('SUPER_ADMIN_KAOHAO') and
+        password == current_app.config.get('SUPER_ADMIN_PASSWORD')
+    )
+
+def _generate_token(kaohao, role=None):
+    payload = {
+        'kaohao': kaohao,
+        'exp': int(datetime.utcnow().timestamp() + 24 * 3600)
+    }
+    if role:
+        payload['role'] = role
+    return jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm='HS256')
 
 # JWT认证装饰器
 def token_required(f):
@@ -28,13 +82,16 @@ def token_required(f):
         try:
             # 解码token
             data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-            current_user = User.query.get(data['kaohao'])
-            
-            if not current_user:
-                return unauthorized('无效的认证令牌')
-            
-            # 将当前用户存储在g对象中，以便在视图函数中使用
-            g.current_user = current_user
+            if data.get('role') == 'super_admin':
+                g.current_user = _build_super_admin_user()
+                g.is_super_admin = True
+            else:
+                current_user = User.query.get(data['kaohao'])
+                if not current_user:
+                    return unauthorized('无效的认证令牌')
+                # 将当前用户存储在g对象中，以便在视图函数中使用
+                g.current_user = current_user
+                g.is_super_admin = False
         except:
             return unauthorized('无效的认证令牌')
         
@@ -56,19 +113,19 @@ def login():
     if not kaohao or not password:
         return bad_request('请提供准考证号和密码')
     
+    if _is_super_admin_login(kaohao, password):
+        token = _generate_token(kaohao, role='super_admin')
+        return jsonify({
+            'token': token,
+            'user': _build_super_admin_user()
+        })
+
     user = User.query.get(kaohao)
-    
     if not user or not user.validate_password(password):
         return unauthorized('准考证号或密码错误')
-    
-    # 生成JWT令牌
-    token = jwt.encode(
-        {'kaohao': user.kaohao, 'exp': int(datetime.utcnow().timestamp() + 24 * 3600)},
-        current_app.config['SECRET_KEY'],
-        algorithm='HS256'
-    )
-    
-    # 返回用户信息和令牌
+
+    token = _generate_token(user.kaohao)
+
     return jsonify({
         'token': token,
         'user': {
@@ -84,7 +141,8 @@ def login():
             'subject4_code': user.subject4_code,
             'subject4_score': user.subject4_score,
             'net_score': user.net_score,
-            'total_score': user.total_score
+            'total_score': user.total_score,
+            'is_super_admin': False
         }
     })
 
@@ -124,27 +182,25 @@ def cjcx():
     }
     
     # 查询成绩
-    # r = scrawl_score(form_data)
+    r = scrawl_score(form_data)
     
-    # if not isinstance(r, requests.Response):
-    #     return bad_request(r)
+    if not isinstance(r, requests.Response):
+        return bad_request(r)
     
-    # # 解析HTML数据并插入新用户
-    # user_data = parse_html_data(r.text)
-    # user = User.insert_new(user_data, password)
+    # 解析HTML数据并插入新用户
+    user_data = parse_html_data(r.text)
+    college = user_data[1] if user_data and len(user_data) > 1 else ''
+    if not _is_college_allowed(college):
+        college_label = _display_college_name(college)
+        return forbidden(f'未开放{college_label}分数排名')
 
-    # 使用模拟数据
-    user = User.insert_new(parse_html_data(data), password=password)
+    user = User.insert_new(user_data, password=password)
     
     if not user:
         return bad_request('数据插入失败，请联系管理员')
     
     # 生成JWT令牌
-    token = jwt.encode(
-        {'kaohao': user.kaohao, 'exp': int(datetime.utcnow().timestamp() + 24 * 3600)},
-        current_app.config['SECRET_KEY'],
-        algorithm='HS256'
-    )
+    token = _generate_token(user.kaohao)
     
     # 返回用户信息和令牌
     return jsonify({
@@ -162,7 +218,8 @@ def cjcx():
             'subject4_code': user.subject4_code,
             'subject4_score': user.subject4_score,
             'net_score': user.net_score,
-            'total_score': user.total_score
+            'total_score': user.total_score,
+            'is_super_admin': False
         }
     })
 
@@ -220,10 +277,10 @@ def reset_password():
     }
     
     # 查询成绩
-    # r = scrawl_score(form_data)
+    r = scrawl_score(form_data)
     
-    # if not isinstance(r, requests.Response):
-    #     return bad_request(r)
+    if not isinstance(r, requests.Response):
+        return bad_request(r)
     
     user = User.query.get(kaohao)
     if not user:
@@ -248,7 +305,9 @@ def get_validate_image():
 @token_required
 def score():
     user = g.current_user
-    
+    if isinstance(user, dict) and user.get('is_super_admin'):
+        return jsonify({'user': user})
+
     return jsonify({
         'user': {
             'kaohao': user.kaohao,
@@ -263,8 +322,17 @@ def score():
             'subject4_code': user.subject4_code,
             'subject4_score': user.subject4_score,
             'net_score': user.net_score,
-            'total_score': user.total_score
+            'total_score': user.total_score,
+            'is_super_admin': False
         }
+    })
+
+@api.route('/public_config')
+def public_config():
+    return jsonify({
+        'ranking_college_allowlist': current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or [],
+        'ranking_college_blocklist': current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or [],
+        'ranking_college_block_message': current_app.config.get('RANKING_COLLEGE_BLOCK_MESSAGE') or '该学院排名已关闭'
     })
 
 # 按总分排名
@@ -272,7 +340,9 @@ def score():
 @token_required
 def ranking_total(college, major):
     page = request.args.get('page', 1, type=int)
-    
+    if not _is_college_allowed(college):
+        return forbidden(current_app.config.get('RANKING_COLLEGE_BLOCK_MESSAGE') or '该学院排名已关闭')
+
     pagination = User.query.filter_by(college=college, major=major).order_by(User.total_score.desc()).paginate(
         page=page, per_page=current_app.config["USERS_PER_PAGE"], error_out=False
     )
@@ -303,7 +373,9 @@ def ranking_total(college, major):
 @token_required
 def ranking_net(college, major):
     page = request.args.get('page', 1, type=int)
-    
+    if not _is_college_allowed(college):
+        return forbidden(current_app.config.get('RANKING_COLLEGE_BLOCK_MESSAGE') or '该学院排名已关闭')
+
     pagination = User.query.filter_by(college=college, major=major).order_by(User.net_score.desc()).paginate(
         page=page, per_page=current_app.config["USERS_PER_PAGE"], error_out=False
     )
@@ -346,41 +418,22 @@ def scrawl_score(form_data):
     return r
 
 # 从html爬取考生信息及分数
-# def parse_html_data(html):
-#     bs = BeautifulSoup(html, 'html.parser')
-#     base_info = bs.select('.info-phone')[0].contents[1].contents[1].contents
-#     kaohao = base_info[7].contents[3].text
-#     temp_list = str.split(base_info[9].contents[3].text)
-#     college = temp_list[0]
-#     major = temp_list[1]
-#     subjects = bs.select('.result')[0].contents[1].contents[3].contents
-#     first_name = subjects[1].contents[1].text + subjects[1].contents[3].text
-#     first_score = int(subjects[1].contents[5].text)
-#     second_name = subjects[3].contents[1].text + subjects[3].contents[3].text
-#     second_score = int(subjects[3].contents[5].text)
-#     third_name = subjects[5].contents[1].text + subjects[5].contents[3].text
-#     third_score = int(subjects[5].contents[5].text)
-#     fourth_name = subjects[7].contents[1].text + subjects[7].contents[3].text
-#     fourth_score = int(subjects[7].contents[5].text)
-#     total_score = int(subjects[9].contents[3].text)
-#     return (kaohao, college, major, first_name, first_score, second_name, second_score, third_name, third_score,
-#             fourth_name, fourth_score, total_score)
-
-
-# 从html爬取考生信息及分数（模拟数据）
-def parse_html_data(data):
-    import random
-    kaohao = data.get('kaohao')
-    college = '225软件学院'
-    major = '085400电子信息'
-    first_name = '思想政治理论'
-    first_score = random.randint(60, 80)
-    second_name = '英语二'
-    second_score = random.randint(70, 90)
-    third_name = '数学二'
-    third_score = random.randint(80, 100)
-    fourth_name = '计算机专业基础'
-    fourth_score = random.randint(90, 120)
-    total_score = first_score + second_score + third_score + fourth_score
+def parse_html_data(html):
+    bs = BeautifulSoup(html, 'html.parser')
+    base_info = bs.select('.info-phone')[0].contents[1].contents[1].contents
+    kaohao = base_info[7].contents[3].text
+    temp_list = str.split(base_info[9].contents[3].text)
+    college = temp_list[0]
+    major = temp_list[1]
+    subjects = bs.select('.result')[0].contents[1].contents[3].contents
+    first_name = subjects[1].contents[1].text + subjects[1].contents[3].text
+    first_score = int(subjects[1].contents[5].text)
+    second_name = subjects[3].contents[1].text + subjects[3].contents[3].text
+    second_score = int(subjects[3].contents[5].text)
+    third_name = subjects[5].contents[1].text + subjects[5].contents[3].text
+    third_score = int(subjects[5].contents[5].text)
+    fourth_name = subjects[7].contents[1].text + subjects[7].contents[3].text
+    fourth_score = int(subjects[7].contents[5].text)
+    total_score = int(subjects[9].contents[3].text)
     return (kaohao, college, major, first_name, first_score, second_name, second_score, third_name, third_score,
             fourth_name, fourth_score, total_score)

@@ -260,7 +260,7 @@ const fetchRankingData = async () => {
     
     total.value = response.total
   } catch (error) {
-    ElMessage.error('获取排名数据失败')
+    ElMessage.error(error.response?.data?.message || '获取排名数据失败')
     console.error('获取排名数据失败:', error)
   } finally {
     loading.value = false

@@ -4,13 +4,31 @@
       <h2>研究生成绩排名查询系统</h2>
     </div>
 
-    <div class="links-container">
+    <div class="links-container" v-if="!isSuperAdmin && canRankOwnCollege">
       <el-button type="primary" @click="goToRanking('total')">按总分排名</el-button>
       <el-button type="primary" @click="goToRanking('net')">按除政治后总分排名</el-button>
     </div>
 
+    <el-alert
+      v-if="!isSuperAdmin && !canRankOwnCollege"
+      type="warning"
+      :closable="false"
+      class="ranking-alert"
+    >
+      {{ rankingBlockMessage }}
+    </el-alert>
+
+    <el-alert
+      v-if="isSuperAdmin"
+      type="info"
+      :closable="false"
+      class="ranking-alert"
+    >
+      管理员账号无个人成绩信息，可通过下方常用排名围观
+    </el-alert>
+
     <!-- 桌面端表格视图 -->
-    <div class="score-container desktop-only">
+    <div class="score-container desktop-only" v-if="!isSuperAdmin">
       <h3>考生信息</h3>
       <el-table 
         :data="[userInfo]" 
@@ -33,7 +51,7 @@
     </div>
 
     <!-- 移动端卡片视图 -->
-    <div class="score-container mobile-only">
+    <div class="score-container mobile-only" v-if="!isSuperAdmin">
       <div class="score-cards">
         <!-- 基本信息卡片 -->
         <div class="score-card">
@@ -108,21 +126,25 @@
       <div class="ranking-links">
         <div class="ranking-row">
           <span class="ranking-label">总分排名:</span>
-          <el-link type="primary" @click="goToSpecificRanking('total', '225软件学院', '085400电子信息')">软件学院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('total', '225软件学院', '083500软件工程')">软件学院学硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('total', '215计算机科学与技术学院', '085400电子信息')">计院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('total', '215计算机科学与技术学院', '081200计算机科学与技术')">计院学硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('total', '218先进技术研究院', '085400电子信息')">先进院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('total', '168研究生院科学岛分院', '085400电子信息')">科学岛专硕</el-link>
+          <el-link
+            v-for="item in filteredCommonRankings"
+            :key="`total-${item.label}`"
+            type="primary"
+            @click="goToSpecificRanking('total', item.college, item.major)"
+          >
+            {{ item.label }}
+          </el-link>
         </div>
         <div class="ranking-row">
           <span class="ranking-label">净分排名:</span>
-          <el-link type="primary" @click="goToSpecificRanking('net', '225软件学院', '085400电子信息')">软件学院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('net', '225软件学院', '083500软件工程')">软件学院学硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('net', '215计算机科学与技术学院', '085400电子信息')">计院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('net', '215计算机科学与技术学院', '081200计算机科学与技术')">计院学硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('net', '218先进技术研究院', '085400电子信息')">先进院专硕</el-link>
-          <el-link type="primary" @click="goToSpecificRanking('net', '168研究生院科学岛分院', '085400电子信息')">科学岛专硕</el-link>
+          <el-link
+            v-for="item in filteredCommonRankings"
+            :key="`net-${item.label}`"
+            type="primary"
+            @click="goToSpecificRanking('net', item.college, item.major)"
+          >
+            {{ item.label }}
+          </el-link>
         </div>
       </div>
     </div>
@@ -135,7 +157,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { userApi } from '@/api'
@@ -154,17 +176,61 @@ const userInfo = ref({
   subject4_code: '',
   subject4_score: 0,
   net_score: 0,
-  total_score: 0
+  total_score: 0,
+  is_super_admin: false
 })
 
 onMounted(async () => {
   try {
-    const response = await userApi.getScore()
-    userInfo.value = response.user
+    const [configResponse, scoreResponse] = await Promise.all([
+      userApi.getPublicConfig().catch(() => null),
+      userApi.getScore()
+    ])
+    if (configResponse) {
+      allowedColleges.value = configResponse.ranking_college_allowlist || []
+      blockedColleges.value = configResponse.ranking_college_blocklist || []
+      rankingBlockMessage.value = configResponse.ranking_college_block_message || '当前学院排名入口已关闭'
+    }
+    userInfo.value = scoreResponse.user
   } catch (error) {
     ElMessage.error('获取成绩信息失败，请重新登录')
     router.push('/')
   }
+})
+
+const allowedColleges = ref([])
+const blockedColleges = ref([])
+const rankingBlockMessage = ref('当前学院排名入口已关闭')
+
+const isSuperAdmin = computed(() => Boolean(userInfo.value.is_super_admin))
+const canRankOwnCollege = computed(() => {
+  if (isSuperAdmin.value) return false
+  if (allowedColleges.value.length) {
+    return allowedColleges.value.includes(userInfo.value.college)
+  }
+  if (blockedColleges.value.length) {
+    return !blockedColleges.value.includes(userInfo.value.college)
+  }
+  return true
+})
+
+const commonRankings = [
+  { label: '软件学院专硕', college: '225软件学院', major: '085400电子信息' },
+  { label: '软件学院学硕', college: '225软件学院', major: '083500软件工程' },
+  { label: '计院专硕', college: '215计算机科学与技术学院', major: '085400电子信息' },
+  { label: '计院学硕', college: '215计算机科学与技术学院', major: '081200计算机科学与技术' },
+  { label: '先进院专硕', college: '218先进技术研究院', major: '085400电子信息' },
+  { label: '科学岛专硕', college: '168研究生院科学岛分院', major: '085400电子信息' }
+]
+
+const filteredCommonRankings = computed(() => {
+  if (allowedColleges.value.length) {
+    return commonRankings.filter(item => allowedColleges.value.includes(item.college))
+  }
+  if (blockedColleges.value.length) {
+    return commonRankings.filter(item => !blockedColleges.value.includes(item.college))
+  }
+  return commonRankings
 })
 
 const goToRanking = (type) => {
@@ -232,6 +298,10 @@ const logout = async () => {
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.ranking-alert {
   margin-bottom: 20px;
 }
 
