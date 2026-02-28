@@ -21,9 +21,18 @@ app = create_app(os.getenv('FLASK_CONFIG') or 'default')
 def make_shell_context():
     return dict(app=app, db=db, User=User)
 
+def clear_db():
+    from app import create_app, db
+    app = create_app('development')
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+    print("done")
+
 # @app.cli.command()
 # def deploy():
 #     db.create_all()
 
 if __name__ == '__main__':
     app.run(host=get_local_ip(), port=5000, debug=True)
+    # clear_db()

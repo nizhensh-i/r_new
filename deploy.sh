@@ -41,6 +41,9 @@ function deploy_front(){
 
 function deploy_backend() {
     backend_to_remote
+    backend=$!
+    wait $backend
+    run_container "backend"
 }
 
 function deploy() {

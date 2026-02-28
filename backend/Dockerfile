@@ -14,8 +14,7 @@ RUN python -m venv venv
 RUN venv/bin/pip install -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -r requirements.txt
 
 COPY app app
-COPY manage.py config.py boot.sh ./
-COPY scores ./scores
+COPY manage.py config.py boot.sh scores/2026/data.db ./
 
 
 # run-time configuration

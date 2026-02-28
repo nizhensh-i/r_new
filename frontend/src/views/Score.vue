@@ -41,10 +41,34 @@
         <el-table-column prop="kaohao" label="准考证号" min-width="120"></el-table-column>
         <el-table-column prop="college" label="学院" min-width="120"></el-table-column>
         <el-table-column prop="major" label="专业" min-width="120"></el-table-column>
-        <el-table-column :prop="'subject1_code'" :label="userInfo.subject1_code" min-width="100"></el-table-column>
-        <el-table-column :prop="'subject2_code'" :label="userInfo.subject2_code" min-width="100"></el-table-column>
-        <el-table-column :prop="'subject3_code'" :label="userInfo.subject3_code" min-width="100"></el-table-column>
-        <el-table-column :prop="'subject4_code'" :label="userInfo.subject4_code" min-width="100"></el-table-column>
+        <el-table-column :prop="'subject1_score'" min-width="100">
+          <template #header>
+            <el-tooltip :content="userInfo.subject1_code || '科目1'" placement="top">
+              <span class="subject-header">{{ userInfo.subject1_code || '科目1' }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column :prop="'subject2_score'" min-width="100">
+          <template #header>
+            <el-tooltip :content="userInfo.subject2_code || '科目2'" placement="top">
+              <span class="subject-header">{{ userInfo.subject2_code || '科目2' }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column :prop="'subject3_score'" min-width="100">
+          <template #header>
+            <el-tooltip :content="userInfo.subject3_code || '科目3'" placement="top">
+              <span class="subject-header">{{ userInfo.subject3_code || '科目3' }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column :prop="'subject4_score'" min-width="100">
+          <template #header>
+            <el-tooltip :content="userInfo.subject4_code || '科目4'" placement="top">
+              <span class="subject-header">{{ userInfo.subject4_code || '科目4' }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column prop="net_score" label="除政治后总分" min-width="120"></el-table-column>
         <el-table-column prop="total_score" label="总分" min-width="100"></el-table-column>
       </el-table>
@@ -307,6 +331,15 @@ const logout = async () => {
 
 .score-table {
   margin-top: 15px;
+}
+
+.subject-header {
+  display: inline-block;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .common-rankings {

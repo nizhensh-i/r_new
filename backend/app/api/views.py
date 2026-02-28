@@ -6,10 +6,116 @@ from datetime import datetime
 import re
 from functools import wraps
 import jwt
+import secrets
+import threading
+import time
 from . import api
 from .errors import unauthorized, bad_request, forbidden
 from ..models import User
-from .. import db
+
+USTC_BASE_URL = 'https://xspt.ustc.edu.cn'
+USTC_INDEX_URL = f'{USTC_BASE_URL}/sscjcx/index'
+USTC_CAPTCHA_PATH = '/captcha/imageCode'
+USTC_USER_AGENT = (
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/143.0.0.0 Safari/537.36'
+)
+CAPTCHA_SESSION_TTL_SECONDS = 300
+_CAPTCHA_SESSION_CACHE = {}
+_CAPTCHA_SESSION_LOCK = threading.Lock()
+
+
+def _cleanup_captcha_sessions(now=None):
+    if now is None:
+        now = time.time()
+    expired = []
+    for token, entry in _CAPTCHA_SESSION_CACHE.items():
+        if now - entry['created_at'] > CAPTCHA_SESSION_TTL_SECONDS:
+            expired.append(token)
+    for token in expired:
+        _CAPTCHA_SESSION_CACHE.pop(token, None)
+
+
+def _store_captcha_session(session, action_url, nd):
+    token = secrets.token_urlsafe(16)
+    now = time.time()
+    with _CAPTCHA_SESSION_LOCK:
+        _cleanup_captcha_sessions(now)
+        _CAPTCHA_SESSION_CACHE[token] = {
+            'session': session,
+            'action_url': action_url,
+            'nd': nd,
+            'created_at': now
+        }
+    return token
+
+
+def _get_captcha_session(token):
+    if not token:
+        return None
+    now = time.time()
+    with _CAPTCHA_SESSION_LOCK:
+        _cleanup_captcha_sessions(now)
+        entry = _CAPTCHA_SESSION_CACHE.get(token)
+        if not entry:
+            return None
+        if now - entry['created_at'] > CAPTCHA_SESSION_TTL_SECONDS:
+            _CAPTCHA_SESSION_CACHE.pop(token, None)
+            return None
+        return entry
+
+
+def _parse_action_and_year(html):
+    bs = BeautifulSoup(html, 'html.parser')
+    form = bs.select_one('form#formId') or bs.find('form')
+    action = form.get('action') if form else None
+    if not action:
+        return None, None
+    if action.startswith('http://') or action.startswith('https://'):
+        action_url = action
+    elif action.startswith('/'):
+        action_url = f'{USTC_BASE_URL}{action}'
+    else:
+        action_url = f'{USTC_BASE_URL}/{action}'
+    nd_value = None
+    nd_input = bs.select_one('input[name="nd"]')
+    if nd_input and nd_input.get('value'):
+        nd_value = nd_input.get('value').strip()
+    return action_url, nd_value
+
+
+def _init_ustc_session():
+    session = requests.Session()
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "User-Agent": USTC_USER_AGENT
+    }
+    try:
+        r = session.get(USTC_INDEX_URL, headers=headers, timeout=10)
+    except requests.RequestException:
+        return None, None, None, '成绩查询入口不可用，请稍后再试'
+    if r.status_code != 200 or not r.text:
+        return None, None, None, '成绩查询入口不可用，请稍后再试'
+    action_url, nd_value = _parse_action_and_year(r.text)
+    if not action_url:
+        return None, None, None, '无法获取查询入口，请刷新验证码重试'
+    return session, action_url, nd_value, None
+
+def _get_college_options():
+    allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
+    blocklist = current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or []
+    options = [c for c in allowlist if c] if allowlist else []
+    if not options:
+        try:
+            rows = User.query.with_entities(User.college).distinct().order_by(User.college).all()
+            options = [row[0] for row in rows if row and row[0]]
+        except Exception:
+            options = []
+    if blocklist and not allowlist:
+        options = [c for c in options if c not in blocklist]
+    return options
 
 def _is_college_allowed(college):
     allowlist = current_app.config.get('RANKING_COLLEGE_ALLOWLIST') or []
@@ -27,7 +133,7 @@ def _is_college_allowed(college):
 def _display_college_name(college):
     if not college:
         return '该学院'
-    return re.sub(r'^\\s*\\d+\\s*', '', college).strip() or '该学院'
+    return re.sub(r'^\s*\d+\s*', '', college).strip() or '该学院'
 
 def _build_super_admin_user():
     return {
@@ -160,36 +266,53 @@ def cjcx():
         return bad_request('无效的请求数据')
     
     kaohao = data.get('kaohao')
-    name = data.get('name')
     id_number = data.get('id')
     password = data.get('password')
     code = data.get('code')
+    college_input = (data.get('college') or '').strip()
     
-    if not all([kaohao, name, id_number, password, code]):
+    if not all([kaohao, id_number, password, code, college_input]):
         return bad_request('请提供所有必要的信息')
     
     # 检查用户是否已存在
     user = User.query.get(kaohao)
     if user:
         return bad_request('此准考证号已查过成绩，请直接登录')
-    
+
+    college_options = _get_college_options()
+    if college_options and college_input not in college_options:
+        return bad_request('学院不在列表中，请重新选择')
+
+    captcha_token = request.cookies.get('captcha_session')
+    captcha_ctx = _get_captcha_session(captcha_token)
+    if not captcha_ctx:
+        return bad_request('验证码已过期，请刷新验证码后再试')
+
     # 构造查询表单数据
     form_data = {
-        'kaohao': kaohao,
-        'name': name,
-        'id': id_number,
-        'code': code
+        'nd': captcha_ctx.get('nd') or 2026,
+        'username': kaohao,
+        'password': id_number,
+        'validateCode': code,
+        
     }
-    
     # 查询成绩
-    r = scrawl_score(form_data)
+    r = scrawl_score(form_data, captcha_ctx['session'], captcha_ctx['action_url'])
     
     if not isinstance(r, requests.Response):
         return bad_request(r)
     
     # 解析HTML数据并插入新用户
-    user_data = parse_html_data(r.text)
-    college = user_data[1] if user_data and len(user_data) > 1 else ''
+    try:
+        user_data = parse_html_data(r.text)
+    except Exception:
+        return bad_request('成绩解析失败，请刷新验证码后重试')
+    if not user_data:
+        return bad_request('成绩解析失败，请刷新验证码后重试')
+    user_data = list(user_data)
+    user_data[1] = college_input
+    user_data = tuple(user_data)
+    college = college_input
     if not _is_college_allowed(college):
         college_label = _display_college_name(college)
         return forbidden(f'未开放{college_label}分数排名')
@@ -261,23 +384,27 @@ def reset_password():
     
     # 未登录状态下修改密码
     kaohao = data.get('kaohao')
-    name = data.get('name')
     id_number = data.get('id')
     code = data.get('code')
     
-    if not all([kaohao, name, id_number, code]):
+    if not all([kaohao, id_number, code]):
         return bad_request('请提供所有必要的信息')
+
+    captcha_token = request.cookies.get('captcha_session')
+    captcha_ctx = _get_captcha_session(captcha_token)
+    if not captcha_ctx:
+        return bad_request('验证码已过期，请刷新验证码后再试')
     
     # 构造查询表单数据
     form_data = {
-        'kaohao': kaohao,
-        'name': name,
-        'id': id_number,
-        'code': code
+        'username': kaohao,
+        'password': id_number,
+        'validateCode': code,
+        'nd': captcha_ctx.get('nd') or '2026'
     }
     
     # 查询成绩
-    r = scrawl_score(form_data)
+    r = scrawl_score(form_data, captcha_ctx['session'], captcha_ctx['action_url'])
     
     if not isinstance(r, requests.Response):
         return bad_request(r)
@@ -291,13 +418,38 @@ def reset_password():
     
     return jsonify({'message': '修改密码成功'})
 
-# 获取验证码
+# 获取验证码（需与查询同一会话）
 @api.route('/captcha')
 def get_validate_image():
-    url = 'http://yzb2.ustc.edu.cn/api/captcha'
-    r = requests.get(url)
+    session, action_url, nd_value, err = _init_ustc_session()
+    if err:
+        return bad_request(err)
+    captcha_url = f'{USTC_BASE_URL}{USTC_CAPTCHA_PATH}?curDate={int(time.time() * 1000)}'
+    headers = {
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "User-Agent": USTC_USER_AGENT,
+        "Referer": USTC_INDEX_URL
+    }
+    try:
+        r = session.get(captcha_url, headers=headers, timeout=10)
+    except requests.RequestException:
+        return bad_request('验证码获取失败，请刷新重试')
+    if r.status_code != 200 or not r.content:
+        return bad_request('验证码获取失败，请刷新重试')
+
+    token = _store_captcha_session(session, action_url, nd_value)
     response = make_response(r.content)
-    response.headers['Content-Type'] = 'image/jpg'
+    response.headers['Content-Type'] = r.headers.get('Content-Type', 'image/jpeg')
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.set_cookie(
+        'captcha_session',
+        token,
+        httponly=True,
+        samesite='Lax',
+        max_age=CAPTCHA_SESSION_TTL_SECONDS
+    )
     return response
 
 # 获取个人成绩
@@ -334,6 +486,10 @@ def public_config():
         'ranking_college_blocklist': current_app.config.get('RANKING_COLLEGE_BLOCKLIST') or [],
         'ranking_college_block_message': current_app.config.get('RANKING_COLLEGE_BLOCK_MESSAGE') or '该学院排名已关闭'
     })
+
+@api.route('/colleges')
+def colleges():
+    return jsonify({'colleges': _get_college_options()})
 
 # 按总分排名
 @api.route('/ranking_total/<college>/<major>')
@@ -402,24 +558,106 @@ def ranking_net(college, major):
     })
 
 # 从 USTC网站上查询成绩
-def scrawl_score(form_data):
-    post_url = 'http://yzb2.ustc.edu.cn/cjcx'
-    r = requests.post(post_url, data=form_data)
-    
-    if "未查询到相关记录" in r.text:
+def scrawl_score(form_data, session, action_url):
+    if not session or not action_url:
+        return '查询会话无效，请刷新验证码重试'
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "User-Agent": USTC_USER_AGENT,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": USTC_BASE_URL,
+        "Referer": action_url,
+    }
+    try:
+        r = session.post(action_url, data=form_data, headers=headers, timeout=10)
+    except requests.RequestException:
+        return "成绩查询失败，请稍后再试"
+
+    text = r.text or ""
+    print("zmc_11", text)
+    if "未查询到相关记录" in text:
         return "未查询到相关记录，请仔细检查或稍后再试"
-    
-    if "错误" in r.text:
+    if "验证码错误" in text or ("验证码" in text and "错误" in text):
         return "验证码错误，请重新输入或稍后再试"
-    
-    if "result" not in r.text:
+    if all(key not in text for key in ("result", "info-phone", "成绩单", "初试成绩单", "总分", "abc")):
         return "成绩抓取失败，请重新输入或稍后再试"
-    
+
     return r
 
 # 从html爬取考生信息及分数
 def parse_html_data(html):
     bs = BeautifulSoup(html, 'html.parser')
+
+    def _clean_text(node):
+        if not node:
+            return ''
+        return ' '.join(node.stripped_strings).strip()
+
+    def _parse_score(text):
+        nums = re.findall(r'\d+', text or '')
+        return int(nums[-1]) if nums else 0
+
+    # 新版结构：成绩单表格
+    table = bs.select_one('table.abc')
+    if table:
+        rows = table.find_all('tr')
+        kaohao = ''
+        college = ''
+        major = ''
+        major_text = ''
+        subjects = []
+        total_score = 0
+
+        for row in rows:
+            cells = row.find_all('td')
+            if not cells:
+                continue
+            header = _clean_text(cells[0])
+            if '准考证号' in header:
+                if len(cells) >= 2:
+                    kaohao = _clean_text(cells[1])
+                continue
+            if '报考专业' in header:
+                if len(cells) >= 2:
+                    major_text = _clean_text(cells[-1])
+                continue
+            if '总分' in header:
+                if len(cells) >= 2:
+                    total_score = _parse_score(_clean_text(cells[-1]))
+                continue
+            if re.search(r'\d{3}', header) and len(cells) >= 2:
+                subject_name = header
+                score = _parse_score(_clean_text(cells[-1]))
+                subjects.append((subject_name, score))
+
+        if major_text:
+            parts = major_text.split()
+            if len(parts) >= 2:
+                college = parts[0]
+                major = ''.join(parts[1:])
+            else:
+                major = major_text
+
+        while len(subjects) < 4:
+            subjects.append(('', 0))
+        subjects = subjects[:4]
+
+        if not total_score:
+            total_score = sum(score for _, score in subjects)
+
+        return (
+            kaohao,
+            college,
+            major,
+            subjects[0][0], subjects[0][1],
+            subjects[1][0], subjects[1][1],
+            subjects[2][0], subjects[2][1],
+            subjects[3][0], subjects[3][1],
+            total_score
+        )
+
+    # 旧版结构（兼容）
     base_info = bs.select('.info-phone')[0].contents[1].contents[1].contents
     kaohao = base_info[7].contents[3].text
     temp_list = str.split(base_info[9].contents[3].text)

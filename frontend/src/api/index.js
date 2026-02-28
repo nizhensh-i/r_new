@@ -6,7 +6,8 @@ const api = axios.create({
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true
 })
 
 // 请求拦截器
@@ -49,7 +50,7 @@ export const userApi = {
   },
   // 获取验证码
   getCaptcha() {
-    return `http://yzb2.ustc.edu.cn/api/captcha?v=${Math.random()}`
+    return `/api/api/captcha?v=${Date.now()}`
   },
   // 获取个人成绩
   getScore() {
@@ -58,6 +59,10 @@ export const userApi = {
   // 获取公开配置
   getPublicConfig() {
     return api.get('/api/public_config')
+  },
+  // 获取学院列表
+  getColleges() {
+    return api.get('/api/colleges')
   },
   // 登出
   logout() {
